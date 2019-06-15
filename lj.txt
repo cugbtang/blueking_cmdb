@@ -1,0 +1,66 @@
+#!/bin/bash
+setenforce 0
+sed -i "s/selinux=enforcing/selinux=disabled/g"
+systemctl stop firewalld stop
+systemctl disable firewalld
+
+tar -zxvf  zookeeper-3.4.12.tar.gz -C /usr/local/
+cp -r /usr/local/zookeeper-3.4.12/conf/zoo_sample.cfg /usr/local/zookeeper-3.4.12/conf/zoo.cfg
+yum install -y java
+cd /usr/local/zookeeper-3.4.12/bin
+./zkServer.sh start
+echo "/usr/local/zookeeper-3.4.12/bin/zkServer.sh start" >> /etc/rc.local
+
+
+tar -zxvf /shared/app/redis-3.2.11.tar.gz -C /tmp/
+yum install -y gcc*
+cd /tmp/redis-3.2.11/
+make
+cd src
+make install PREFIX=/usr/local/redis
+cd /usr/local/redis/
+mkdir etc logs db
+cp -r /tmp/redis-3.2.11/redis.conf etc/
+sed -i "s/logfile \"\"/logfile \"\/usr\/local\/redis\/logs\/redis.log\"/g" /usr/local/redis/etc/redis.conf
+sed -i "s/daemonize no/daemonize yes/g" /usr/local/redis/etc/redis.conf
+echo "requirepass Root1" >> /usr/local/redis/etc/redis.conf
+echo "dir /usr/local/redis/db" >> /usr/local/redis/etc/redis.conf
+echo "/usr/local/redis/bin/redis-server /usr/local/redis/etc/redis.conf" >> /etc/rc.local
+需要注釋 127.0.0.1
+cd  /usr/local/redis/bin/
+./redis-server ../etc/redis.conf
+
+
+tar -zxvf /shared/app/mongodb-linux-x86_64-rhel70-2.8.0-rc5.gz -C /usr/local/
+cd /usr/local/
+mv mongodb-linux-x86_64-rhel70-2.8.0-rc5 mongodb2.8
+cd mongodb2.8/
+mkdir log
+mkdir db
+./bin/mongod --dbpath=./db --logpath=./log/mongodb.log --fork --auth
+echo "/usr/local/mongodb2.8/bin/mong+od --dbpath=/usr/local/mongodb2.8/db --logpath=/usr/local/mongodb2.8/log/mongodb.log --fork --auth" >>  /etc/rc.local
+               
+ 
+
+执行脚本完成后,mongod建立用户
+
+cd /usr/local/mongodb2.8/bin/mongod
+
+bin/mongo
+use admin
+db.createUser({user: 'root', pwd: 'Root1', roles: ['root']})
+db.auth('root','Root1')
+use cmdb
+db.createUser({user: "cc",pwd: "cc",roles: [ { role: "readWrite", db: "cmdb" } ]})
+
+mkdir /data/
+
+tar -zxvf /app/cmdb -C /data/
+cd /data/cmdb/
+
+初始化：
+
+python init.py --discovery 192.168.1.142:2181 --database cmdb --redis_ip 192.168.1.142 --redis_port 6379 --redis_pass Root1 --mongo_ip 192.168.1.142 --mongo_port 27017 --mongo_user cc --mongo_pass cc --blueking_cmdb_url http://192.168.1.142:8081 --listen_port 8081
+
+./start.sh
+bash ./init_db.sh
